@@ -1,0 +1,17 @@
+# Source MIDIs stay local. They are other people's recordings and
+# arrangements; add your own instead (see "Adding a song" in the README).
+midi/*
+!midi/.gitkeep
+
+# Converted schedules are transcriptions of those same works, so they stay
+# local too. The Canon is the exception: Pachelbel died in 1706.
+songs/*
+!songs/canon-in-d.sched
+
+# Letter-note sheets for copyrighted songs
+river-full.txt
+river-intro.txt
+
+# Runtime
+.playing.lock
+*.tsv
