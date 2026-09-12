@@ -27,6 +27,8 @@ public static class PianoEngine
     const byte VK_SHIFT = 0x10;
     const int  VK_END   = 0x23;   // stop
     const int  VK_F8    = 0x77;   // pause / resume
+    const int  VK_CTRL  = 0x11;
+    const int  VK_C     = 0x43;
 
     const int GO = 0, STOP = 1, REBASE = 2;
 
@@ -99,6 +101,17 @@ public static class PianoEngine
 
     static bool EndPressed() { return (GetAsyncKeyState(VK_END) & 0x8000) != 0; }
 
+    // Ctrl+C only reaches the console when the console has focus, and while a
+    // song plays the game has it. Watching the keys directly makes the habit
+    // work from inside the game too.
+    static bool CtrlCPressed()
+    {
+        return (GetAsyncKeyState(VK_CTRL) & 0x8000) != 0
+            && (GetAsyncKeyState(VK_C) & 0x8000) != 0;
+    }
+
+    static bool StopWanted() { return _stop || EndPressed() || CtrlCPressed(); }
+
     static bool F8Edge()
     {
         bool now = (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
@@ -111,8 +124,8 @@ public static class PianoEngine
     // when the next note is seconds away.
     static int Poll(Stopwatch sw)
     {
-        if (_stop || EndPressed()) { _stop = true; return STOP; }
-        if (F8Edge()) { _paused = !_paused; if (_paused) Console.WriteLine("  [paused - F8 to resume, END to stop]"); }
+        if (StopWanted()) { _stop = true; return STOP; }
+        if (F8Edge()) { _paused = !_paused; if (_paused) Console.WriteLine("  [paused - F8 to resume, END or Ctrl+C to stop]"); }
 
         bool lost = !Focused();
         if (!_paused && !lost) return GO;
@@ -125,7 +138,7 @@ public static class PianoEngine
         while (true)
         {
             Thread.Sleep(30);
-            if (_stop || EndPressed()) { _stop = true; return STOP; }
+            if (StopWanted()) { _stop = true; return STOP; }
             if (F8Edge()) _paused = !_paused;
             if (!_paused && Focused()) break;
         }

@@ -15,7 +15,7 @@
                        "  "       two or more spaces = that many beats of rest
                        |          bar line; it and its spaces are one separator
 
-  While playing:  END = stop,  F8 = pause/resume,  Ctrl+C = stop.
+  While playing:  END or Ctrl+C = stop,  F8 = pause/resume.
 #>
 param(
   [string]$Schedule,
@@ -280,7 +280,7 @@ $proc = Get-Process | Where-Object { $_.MainWindowTitle -match 'Roblox' } | Sele
 if ($proc) { [void]$Engine::Focus($proc.MainWindowHandle) }
 
 for ($t = $Countdown; $t -gt 0; $t--) {
-  Write-Host "Click the Roblox piano... starting in $t   (END = stop, F8 = pause)" -ForegroundColor Yellow
+  Write-Host "Click the Roblox piano... starting in $t   (END or Ctrl+C = stop, F8 = pause)" -ForegroundColor Yellow
   Start-Sleep -Seconds 1
 }
 

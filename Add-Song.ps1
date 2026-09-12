@@ -21,7 +21,8 @@ param(
   [string]$Title,
   [string]$Artist = '',
   [string]$Name,
-  [object]$Tracks,
+  [object]$Parts,
+  [object]$Tracks,      # old name for -Parts
   [int]$Offset = 36,
   [switch]$Force
 )
@@ -43,31 +44,32 @@ $midiPath = (Resolve-Path -LiteralPath $Midi).Path
 
 # Taken as text on purpose: launched with -File, PowerShell reads "-Tracks 2,4,6"
 # as the single number 246, treating the commas as thousands separators.
+if (-not $Parts -and $Tracks) { $Parts = $Tracks }
 $trackList = $null
-if ($Tracks) {
+if ($Parts) {
   $trackList = [int[]]@(
-    (($Tracks -join ',') -split '[,;\s]+') | Where-Object { $_ -ne '' } | ForEach-Object {
+    (($Parts -join ',') -split '[,;\s]+') | Where-Object { $_ -ne '' } | ForEach-Object {
       $n = 0
-      if (-not [int]::TryParse($_, [ref]$n)) { throw "-Tracks: '$_' is not a track number." }
+      if (-not [int]::TryParse($_, [ref]$n)) { throw "-Parts: '$_' is not a part number." }
       $n
     }
   )
-  if ($trackList.Count -eq 0) { throw "-Tracks was given but no track numbers were found." }
+  if ($trackList.Count -eq 0) { throw "-Parts was given but no part numbers were found." }
 }
 
 if ($List) {
   Write-Host ''
   Write-Host ("  $([IO.Path]::GetFileName($midiPath))") -ForegroundColor Cyan
-  Write-Host ('  {0,-5} {1,-4} {2,-7} {3,-14} {4,-5} {5}' -f 'track','ch','notes','range','poly','instrument') -ForegroundColor DarkGray
+  Write-Host ('  {0,-5} {1,-4} {2,-4} {3,-7} {4,-14} {5,-5} {6}' -f 'part','trk','ch','notes','range','poly','instrument') -ForegroundColor DarkGray
   foreach ($t in $Conv::Describe($midiPath)) {
     $range = '{0}-{1}' -f $Conv::MidiName($t.Low), $Conv::MidiName($t.High)
-    $line  = '  {0,-5} {1,-4} {2,-7} {3,-14} {4,-5} {5}' -f `
-             $t.Index, ($t.Channel + 1), $t.Notes, $range, $t.MaxPoly, $t.Programs
+    $line  = '  {0,-5} {1,-4} {2,-4} {3,-7} {4,-14} {5,-5} {6}' -f `
+             $t.Index, $t.Track, ($t.Channel + 1), $t.Notes, $range, $t.MaxPoly, $t.Programs
     if ($t.IsDrums) { Write-Host ($line + '   [drums - always skipped]') -ForegroundColor DarkYellow }
     else { Write-Host $line }
   }
   Write-Host ''
-  Write-Host '  Pick a melody track plus a bass or accompaniment track, then rerun with -Tracks' -ForegroundColor DarkGray
+  Write-Host '  Pick a melody part plus a bass or accompaniment part, then rerun with -Parts' -ForegroundColor DarkGray
   Write-Host '  A melody is usually the one with poly 1-2 in the upper range.' -ForegroundColor DarkGray
   return
 }
@@ -88,7 +90,7 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine("# title: $Title")
 [void]$sb.AppendLine("# artist: $Artist")
 [void]$sb.AppendLine("# source: $([IO.Path]::GetFileName($midiPath))")
-if ($trackList) { [void]$sb.AppendLine("# tracks: $($trackList -join ',')") }
+if ($trackList) { [void]$sb.AppendLine("# parts: $($trackList -join ',')") }
 [void]$sb.AppendLine("# start_ms`tdur_ms`tkey")
 foreach ($n in $r.Notes) {
   [void]$sb.AppendLine(('{0:0.0}' -f $n.At) + "`t" + ('{0:0.0}' -f $n.Dur) + "`t" + $layout[$n.Idx])

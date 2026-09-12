@@ -33,12 +33,18 @@ public static class MidiSchedule
         return char.ToUpperInvariant(c);
     }
 
+    // A "part" is one channel inside one track. Multi-track files give each
+    // instrument its own track, but format 0 files put the whole arrangement on
+    // a single track and tell instruments apart by channel alone - so the
+    // channel, not the track, is what can actually be picked out.
     public class TrackInfo
     {
-        public int Index, Channel, Notes, Low, High, MaxPoly;
+        public int Index, Track, Channel, Notes, Low, High, MaxPoly;
         public bool IsDrums;
         public string Name = "", Programs = "";
     }
+
+    static int PartKey(int track, int channel) { return track * 16 + channel; }
 
     public class Result
     {
@@ -80,8 +86,8 @@ public static class MidiSchedule
             if (Encoding.ASCII.GetString(b, p, 4) != "MTrk") break;
             int len = BE32(b, p + 4), end = p + 8 + len, j = p + 8, tick = 0, running = -1;
             var open = new Dictionary<int, List<int>>();
-            var ti = new TrackInfo { Index = t, Channel = -1, Low = int.MaxValue, High = int.MinValue };
-            var programs = new SortedSet<int>();
+            var programs = new Dictionary<int, SortedSet<int>>();   // per channel
+            string trackName = "";
 
             while (j < end)
             {
@@ -97,7 +103,10 @@ public static class MidiSchedule
                     {
                         if (!open.ContainsKey(n)) open[n] = new List<int>();
                         open[n].Add(tick);
-                        if (ti.Channel < 0) ti.Channel = ch;
+                        int pk = PartKey(t, ch);
+                        if (!info.ContainsKey(pk))
+                            info[pk] = new TrackInfo { Track = t, Channel = ch, Low = int.MaxValue, High = int.MinValue };
+                        var ti = info[pk];
                         if (ch == DrumChannel) ti.IsDrums = true;
                         ti.Notes++;
                         if (n < ti.Low) ti.Low = n;
@@ -110,7 +119,11 @@ public static class MidiSchedule
                     }
                 }
                 else if (hi == 0xA0 || hi == 0xB0 || hi == 0xE0) j += 2;
-                else if (hi == 0xC0) { programs.Add(b[j]); j += 1; }
+                else if (hi == 0xC0)
+                {
+                    if (!programs.ContainsKey(ch)) programs[ch] = new SortedSet<int>();
+                    programs[ch].Add(b[j]); j += 1;
+                }
                 else if (hi == 0xD0) j += 1;
                 else if (st == 0xFF)
                 {
@@ -118,16 +131,21 @@ public static class MidiSchedule
                     if (meta == 0x51 && mlen == 3)
                         tempos.Add(new int[] { tick, (b[j] << 16) | (b[j + 1] << 8) | b[j + 2] });
                     else if (meta == 0x03)
-                        ti.Name = Encoding.ASCII.GetString(b, j, mlen).Trim();
+                        trackName = Encoding.ASCII.GetString(b, j, mlen).Trim();
                     j += mlen;
                 }
                 else if (st == 0xF0 || st == 0xF7) { int slen = ReadVarInt(b, ref j); j += slen; }
                 else throw new Exception("Bad MIDI status byte 0x" + st.ToString("X2") + " at " + j);
             }
-            var names = new List<string>();
-            foreach (int pr in programs) names.Add(GmName(pr));
-            ti.Programs = string.Join(", ", names.ToArray());
-            if (ti.Notes > 0) info[t] = ti;
+            foreach (var kv in info)
+            {
+                if (kv.Value.Track != t) continue;
+                kv.Value.Name = trackName;
+                var names = new List<string>();
+                if (programs.ContainsKey(kv.Value.Channel))
+                    foreach (int pr in programs[kv.Value.Channel]) names.Add(GmName(pr));
+                kv.Value.Programs = string.Join(", ", names.ToArray());
+            }
             p = end;
         }
 
@@ -135,19 +153,19 @@ public static class MidiSchedule
         tempos.Sort((x, y) => x[0].CompareTo(y[0]));
     }
 
-    public static List<TrackInfo> Describe(string path)
+    // Both Describe and Convert number the parts the same way, so what -List
+    // prints is exactly what -Parts selects.
+    static List<TrackInfo> OrderParts(Dictionary<int, TrackInfo> info, List<RawNote> raw)
     {
-        List<RawNote> raw; List<int[]> tempos; int div; Dictionary<int, TrackInfo> info;
-        Parse(path, out raw, out tempos, out div, out info);
-
-        var byTrack = new Dictionary<int, List<int[]>>();     // {tick, +1/-1}
+        var byPart = new Dictionary<int, List<int[]>>();
         foreach (var n in raw)
         {
-            if (!byTrack.ContainsKey(n.Track)) byTrack[n.Track] = new List<int[]>();
-            byTrack[n.Track].Add(new int[] { n.Start, 1 });
-            byTrack[n.Track].Add(new int[] { n.End, -1 });
+            int pk = PartKey(n.Track, n.Channel);
+            if (!byPart.ContainsKey(pk)) byPart[pk] = new List<int[]>();
+            byPart[pk].Add(new int[] { n.Start, 1 });
+            byPart[pk].Add(new int[] { n.End, -1 });
         }
-        foreach (var kv in byTrack)
+        foreach (var kv in byPart)
         {
             kv.Value.Sort((x, y) => x[0] != y[0] ? x[0].CompareTo(y[0]) : x[1].CompareTo(y[1]));
             int cur = 0, mx = 0;
@@ -155,16 +173,35 @@ public static class MidiSchedule
             if (info.ContainsKey(kv.Key)) info[kv.Key].MaxPoly = mx;
         }
         var list = new List<TrackInfo>(info.Values);
-        list.Sort((x, y) => x.Index.CompareTo(y.Index));
+        list.Sort(delegate(TrackInfo a, TrackInfo b)
+        {
+            if (a.Track != b.Track) return a.Track.CompareTo(b.Track);
+            return a.Channel.CompareTo(b.Channel);
+        });
+        for (int i = 0; i < list.Count; i++) list[i].Index = i + 1;
         return list;
     }
 
-    public static Result Convert(string path, int offset, int[] tracks)
+    public static List<TrackInfo> Describe(string path)
+    {
+        List<RawNote> raw; List<int[]> tempos; int div; Dictionary<int, TrackInfo> info;
+        Parse(path, out raw, out tempos, out div, out info);
+        return OrderParts(info, raw);
+    }
+
+    public static Result Convert(string path, int offset, int[] parts)
     {
         List<RawNote> raw; List<int[]> tempos; int div; Dictionary<int, TrackInfo> info;
         Parse(path, out raw, out tempos, out div, out info);
 
-        var keep = tracks == null ? null : new HashSet<int>(tracks);
+        HashSet<int> keep = null;
+        if (parts != null && parts.Length > 0)
+        {
+            var wanted = new HashSet<int>(parts);
+            keep = new HashSet<int>();
+            foreach (var pi in OrderParts(info, raw))
+                if (wanted.Contains(pi.Index)) keep.Add(PartKey(pi.Track, pi.Channel));
+        }
         var res = new Result();
         res.TempoChanges = tempos.Count;
         // A file often opens with a placeholder tempo, so report the one that
@@ -199,7 +236,7 @@ public static class MidiSchedule
         foreach (var r in raw)
         {
             if (r.Channel == DrumChannel) { res.DrumNotesSkipped++; continue; }
-            if (keep != null && !keep.Contains(r.Track)) continue;
+            if (keep != null && !keep.Contains(PartKey(r.Track, r.Channel))) continue;
             int idx = r.Pitch - offset;
             if (idx < 0 || idx >= Layout.Length) { res.Dropped++; continue; }
             double s = toMs(r.Start);

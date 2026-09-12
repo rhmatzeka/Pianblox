@@ -26,9 +26,11 @@ Double-click `PLAY.bat`, or:
 Pick a number, then click the Roblox window during the five-second countdown.
 Leave the game's own transpose ("Pindahkan") at 0.
 
-While playing: **END** stops, **F8** pauses and resumes. Both are global, so
-they work while Roblox has focus. Alt-tabbing away pauses automatically and
-lifts every key, so it never types into another window.
+While playing: **END** or **Ctrl+C** stops, **F8** pauses and resumes. All
+three are watched as global hotkeys — Ctrl+C would otherwise never arrive,
+since the console does not have focus while the game does. Alt-tabbing away
+pauses automatically and lifts every key, so it never types into another
+window.
 
 ```powershell
 .\Play.ps1 -Song canon        # skip the menu
@@ -45,15 +47,24 @@ playing:
 ```
 
 ```
-  track ch   notes   range          poly  instrument
-  2     2    534     C2-D3          2     Acoustic Bass
-  4     4    336     G3-D5          2     Alto Sax
-  10    10   231     B1-A5          2     Acoustic Grand   [drums - always skipped]
+  part  trk  ch   notes   range          poly  instrument
+  1     0    4    415     B3-B5          4     Violin
+  3     0    7    639     E2-E4          11    Nylon Guitar
+  4     0    9    1274    F#2-B4         9     Steel Guitar
 ```
 
 ```powershell
-.\Add-Song.ps1 -Midi ".\midi\song.mid" -Title "Song" -Artist "Someone" -Tracks "2,4"
+.\Add-Song.ps1 -Midi ".\midi\song.mid" -Title "Song" -Artist "Someone" -Parts "1,3"
 ```
+
+A *part* is one channel inside one track. Multi-track files give each
+instrument its own track, but format 0 files — most karaoke MIDIs — put the
+whole arrangement on a single track and tell instruments apart by channel
+alone, so the channel is what can actually be picked out.
+
+Polyphony is the giveaway when hunting for the melody: a line a voice could
+sing sits at 1-2, while 9 or 11 means strummed chords, whatever the patch is
+called.
 
 Most MIDI files are a whole band. One piano playing every track at once is
 mud, and the game has no volume control, so a melody buried under a dense
@@ -112,6 +123,7 @@ for a live player.
 | | |
 |---|---|
 | `-Song <name>` | play without the menu; matches part of the title |
+| `-Parts <list>` | which parts of a MIDI to convert, from `-List` |
 | `-Speed <n>` | `0.9` slower, `1.1` faster; rhythm stays proportional |
 | `-Countdown <s>` | seconds before playing, default 5 |
 | `-DryRun` | list the notes without pressing anything |

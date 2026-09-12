@@ -56,8 +56,11 @@ function Show-Menu {
   for ($i = 0; $i -lt $list.Count; $i++) {
     $s = $list[$i]
     Write-Host ('  {0,2}. ' -f ($i + 1)) -NoNewline -ForegroundColor Yellow
-    Write-Host ('{0,-28}' -f $s.Title) -NoNewline
-    Write-Host ('{0,-18}' -f $s.Artist) -NoNewline -ForegroundColor DarkGray
+    # Long titles and artists are trimmed so the columns never collide.
+    $title  = if ($s.Title.Length  -gt 27) { $s.Title.Substring(0,26)  + '.' } else { $s.Title }
+    $artist = if ($s.Artist.Length -gt 23) { $s.Artist.Substring(0,22) + '.' } else { $s.Artist }
+    Write-Host ('{0,-28}' -f $title) -NoNewline
+    Write-Host ('{0,-24}' -f $artist) -NoNewline -ForegroundColor DarkGray
     Write-Host ('{0:mm\:ss}  {1,4} notes' -f $s.Length, $s.Notes) -ForegroundColor DarkGray
   }
   Write-Host ('   q. quit') -ForegroundColor DarkGray
@@ -84,7 +87,7 @@ else {
 
 Write-Host ''
 Write-Host ("  Playing: {0}{1}  ({2:mm\:ss})" -f $pick.Title, $(if ($pick.Artist) { " - $($pick.Artist)" } else { '' }), $pick.Length) -ForegroundColor Green
-Write-Host '  END = stop, F8 = pause' -ForegroundColor DarkGray
+Write-Host '  END or Ctrl+C = stop, F8 = pause' -ForegroundColor DarkGray
 Write-Host ''
 
 $args = @{ Schedule = $pick.File; Speed = $Speed; Countdown = $Countdown }
