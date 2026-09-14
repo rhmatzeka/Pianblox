@@ -1,4 +1,4 @@
-# Roblox Piano Player
+# Roblox Piano Player.
 
 Plays MIDI files on a Roblox virtual piano by sending real keystrokes, with
 timing accurate to about a millisecond.
