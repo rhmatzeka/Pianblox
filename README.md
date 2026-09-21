@@ -130,3 +130,7 @@ for a live player.
 | `-SelfTest` | strike all 61 keys one at a time, to find a dead one |
 | `-Force` | take over from a player that is already running |
 | `-Trace <file>` | record planned against actual press times |
+
+## License
+
+Released under the [MIT License](LICENSE).
