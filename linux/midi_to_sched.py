@@ -7,6 +7,8 @@ Same rules as the Windows version:
   * a key must be up 60 ms before it is struck again, a strike shorter than 130 ms may be silent
   * the same pitch doubled across tracks is folded into one note
   * two different pitches wanting one physical key (q / Q share hardware): the higher one wins
+  * a note beyond either end of the 61 keys is moved by whole octaves until it fits
+    (a low bass line keeps its shape an octave up instead of disappearing)
 
 Usage (through the player):
     pianblox add song.mid --list
@@ -87,6 +89,7 @@ class Result:
     def __init__(self):
         self.notes = []
         self.dropped = self.lengthened = self.shortened = self.drum_skipped = self.merged = self.conflicts = 0
+        self.folded = 0
         self.bpm = self.length_ms = 0.0
         self.tempo_changes = 0
         self.low_idx, self.high_idx = 10 ** 9, -10 ** 9
@@ -233,15 +236,18 @@ def convert(path, offset, parts=None):
         return out + (tick - last) * float(us) / div / 1000.0
 
     for (t, ch, pitch, start, end) in raw:
+        if keep is not None and (t * 16 + ch) not in keep:
+            continue
         if ch == DRUM_CHANNEL:
             res.drum_skipped += 1
             continue
-        if keep is not None and (t * 16 + ch) not in keep:
-            continue
         idx = pitch - offset
         if idx < 0 or idx >= len(LAYOUT):
-            res.dropped += 1
-            continue
+            while idx < 0:
+                idx += 12
+            while idx >= len(LAYOUT):
+                idx -= 12
+            res.folded += 1
         s = to_ms(start)
         res.notes.append(Note(s, to_ms(end) - s, idx))
         res.low_idx, res.high_idx = min(res.low_idx, idx), max(res.high_idx, idx)
@@ -373,8 +379,8 @@ def main(argv):
         print("  %d notes dropped where two pitches wanted one physical key" % r.conflicts)
     if r.drum_skipped:
         print("  %d drum notes skipped" % r.drum_skipped)
-    if r.dropped:
-        print("  WARNING: %d notes fell outside the 61 keys - try a different --offset" % r.dropped)
+    if r.folded:
+        print("  %d notes beyond the 61 keys moved by an octave to fit (a different --offset may need fewer)" % r.folded)
     return 0
 
 
