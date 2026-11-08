@@ -15,3 +15,7 @@ river-intro.txt
 # Runtime
 .playing.lock
 *.tsv
+
+# Python bytecode and local knowledge-graph output
+__pycache__/
+graphify-out/
